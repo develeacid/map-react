@@ -28,8 +28,8 @@ function Mapa() {
         }),
       ],
       view: new View({
-        center: [-98.0, 19.0], // Centra el mapa en México
-        zoom: 5,
+        center: [-96.769722, 17.066167], // Centro en Oaxaca
+        zoom: 7, // Zoom para mostrar el estado de Oaxaca
       }),
     });
 
