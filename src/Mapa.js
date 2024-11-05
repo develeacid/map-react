@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
 import "ol/ol.css";
-import "bootstrap/dist/css/bootstrap.min.css"; // Importa Bootstrap
 import { Map, View } from "ol";
 import TileLayer from "ol/layer/Tile";
 import OSM from "ol/source/OSM";
@@ -8,73 +7,55 @@ import VectorLayer from "ol/layer/Vector";
 import VectorSource from "ol/source/Vector";
 import GeoJSON from "ol/format/GeoJSON";
 import { useGeographic } from "ol/proj";
-import { Style, Stroke, Fill } from "ol/style";
+import { Style, Stroke, Fill, Circle as OlCircle } from "ol/style";  // Asegúrate de importar Circle
 import * as turf from "@turf/turf";
-import datos from "./denue_inegi_20_.json";
+import municipiosData from "./municipios_oaxaca.json";  // Importamos el archivo GeoJSON de municipios
+import puntosData from "./denue_inegi_20_.json";  // Importamos los datos de puntos del DENUE
 
 function Mapa() {
   const mapRef = useRef();
   const [map, setMap] = useState(null);
-  const [vectorSource, setVectorSource] = useState(null);
-  const [rectangleLayer, setRectangleLayer] = useState(null);
-  const [rectangles, setRectangles] = useState([]);
-  const [puntosEnCuadro, setPuntosEnCuadro] = useState([]);
-  const [selectedRectangle, setSelectedRectangle] = useState("");
+  const [municipiosLayer, setMunicipiosLayer] = useState(null);
+  const [denueLayer, setDenueLayer] = useState(null);
+  const [selectedMunicipio, setSelectedMunicipio] = useState("");
+  const [puntosEnMunicipio, setPuntosEnMunicipio] = useState([]);
 
   useGeographic();
 
   useEffect(() => {
-    const initialVectorSource = new VectorSource({
-      features: new GeoJSON().readFeatures(datos),
+    // Cargar y procesar los datos de los municipios
+    const municipiosSource = new VectorSource({
+      features: new GeoJSON().readFeatures(municipiosData),
     });
 
-    const vectorLayer = new VectorLayer({
-      source: initialVectorSource,
-    });
-
-    // Definimos los bounds para cada rectángulo con nombres y colores
-    const rectanglePolygons = [
-      { 
-        geometry: turf.multiPolygon([[[[-96.8, 17.0], [-96.8, 17.1], [-96.7, 17.1], [-96.7, 17.0], [-96.8, 17.0]]], [[[-96.65, 17.0], [-96.65, 17.1], [-96.55, 17.1], [-96.55, 17.0], [-96.65, 17.0]]]]),
-        color: "rgba(255, 0, 0, 0.3)", 
-        name: "Rojo (MultiPolygon)"
-      },
-      { 
-        geometry: turf.polygon([[[-96.75, 17.05], [-96.75, 17.15], [-96.45, 17.15], [-96.45, 17.05], [-96.75, 17.05]]]), 
-        color: "rgba(0, 255, 0, 0.3)", 
-        name: "Verde"
-      },
-      { 
-        geometry: turf.polygon([[[-96.7, 17.1], [-96.7, 17.25], [-96.55, 17.25], [-96.55, 17.1], [-96.7, 17.1]]]), 
-        color: "rgba(0, 0, 255, 0.3)", 
-        name: "Azul"
-      },
-    ];
-
-    setRectangles(rectanglePolygons);
-
-    const rectangleSource = new VectorSource({
-      features: rectanglePolygons.map((rect) => {
-        const feature = new GeoJSON().readFeature(rect.geometry, {
-          featureProjection: "EPSG:4326",
-        });
-        feature.setStyle(
-          new Style({
-            fill: new Fill({
-              color: rect.color,
-            }),
-            stroke: new Stroke({
-              color: "#333",
-              width: 2,
-            }),
-          })
-        );
-        return feature;
+    const municipiosLayer = new VectorLayer({
+      source: municipiosSource,
+      style: new Style({
+        fill: new Fill({
+          color: "rgba(0, 0, 255, 0.3)",
+        }),
+        stroke: new Stroke({
+          color: "#333",
+          width: 2,
+        }),
       }),
     });
 
-    const rectangleLayer = new VectorLayer({
-      source: rectangleSource,
+    // Cargar y procesar los puntos del DENUE
+    const puntosSource = new VectorSource({
+      features: new GeoJSON().readFeatures(puntosData),
+    });
+
+    const denueLayer = new VectorLayer({
+      source: puntosSource,
+      style: new Style({
+        image: new OlCircle({
+          radius: 5,  // Tamaño del círculo
+          fill: new Fill({
+            color: "red",  // Color del círculo
+          }),
+        }),
+      }),
     });
 
     const initialMap = new Map({
@@ -83,8 +64,8 @@ function Mapa() {
         new TileLayer({
           source: new OSM(),
         }),
-        vectorLayer,
-        rectangleLayer,
+        municipiosLayer,  // Capa de polígonos de municipios
+        denueLayer,       // Capa de puntos del DENUE
       ],
       view: new View({
         center: [-96.769722, 17.066167],
@@ -93,8 +74,8 @@ function Mapa() {
     });
 
     setMap(initialMap);
-    setVectorSource(initialVectorSource);
-    setRectangleLayer(rectangleLayer);
+    setMunicipiosLayer(municipiosLayer);
+    setDenueLayer(denueLayer);
 
     return () => {
       initialMap.setTarget(null);
@@ -103,90 +84,96 @@ function Mapa() {
     };
   }, []);
 
-  const buscarPuntosEnCuadro = (rectangle) => {
-    if (!map || !vectorSource || !rectangle) return;
-
-    const puntosEnCuadro = vectorSource.getFeatures().filter((feature) => {
-      const coords = feature.getGeometry().getCoordinates();
-      if (!coords || coords.length === 0) {
-        console.warn("Coordenadas del punto no válidas:", coords);
-        return false;
-      }
-
-      const point = turf.point(coords);
-      const polygon = rectangle.geometry;
-
-      if (!polygon) {
-        console.warn("Polígono no definido para el rectángulo:", rectangle);
-        return false;
-      }
-
-      if (polygon.type === "MultiPolygon") {
-        return polygon.coordinates.some((subPolygon) => {
-          const individualPolygon = turf.polygon(subPolygon);
-          return turf.booleanPointInPolygon(point, individualPolygon);
+  const handleMunicipioChange = (event) => {
+    const selectedCVEGEO = event.target.value;
+    setSelectedMunicipio(selectedCVEGEO);
+  
+    // Filtrar los puntos dentro del municipio seleccionado
+    if (selectedCVEGEO) {
+      const municipioFeature = municipiosData.features.find(
+        (feature) => feature.properties.CVEGEO === selectedCVEGEO
+      );
+  
+      if (municipioFeature) {
+        const municipioGeometry = municipioFeature.geometry; // Extraer solo la geometría
+  
+        // Verificar si el municipio tiene una geometría válida
+        let municipioPolygon;
+        if (municipioGeometry.type === "MultiPolygon") {
+          // Asegúrate de que cada anillo de los polígonos tenga al menos 4 puntos
+          const validCoordinates = municipioGeometry.coordinates.filter(
+            (polygon) => polygon[0].length >= 4
+          );
+  
+          if (validCoordinates.length > 0) {
+            // Crear el polígono con Turf.js solo si es válido
+            municipioPolygon = turf.multiPolygon(validCoordinates);
+          } else {
+            console.error("Geometría inválida en municipio:", selectedCVEGEO);
+            return;
+          }
+        } else if (municipioGeometry.type === "Polygon") {
+          // Verificar que el polígono tenga al menos 4 puntos
+          if (municipioGeometry.coordinates[0].length >= 4) {
+            municipioPolygon = turf.polygon(municipioGeometry.coordinates);
+          } else {
+            console.error("Geometría inválida en municipio:", selectedCVEGEO);
+            return;
+          }
+        }
+  
+        // Filtrar los puntos dentro del municipio seleccionado
+        const puntosDentro = puntosData.features.filter((point) => {
+          const pointCoords = point.geometry.coordinates;
+          const turfPoint = turf.point(pointCoords);
+          return turf.booleanPointInPolygon(turfPoint, municipioPolygon);
+        });
+  
+        setPuntosEnMunicipio(puntosDentro);
+  
+        // Obtener el bounding box del municipio usando OpenLayers
+        const municipioExtent = new GeoJSON().readGeometry(municipioGeometry).getExtent();
+  
+        // Aplicar el zoom al municipio seleccionado
+        map.getView().fit(municipioExtent, {
+          duration: 1000,  // Duración del zoom
+          padding: [50, 50, 50, 50],  // Espaciado alrededor del municipio
         });
       }
-
-      return turf.booleanPointInPolygon(point, polygon);
-    });
-
-    setPuntosEnCuadro(puntosEnCuadro);
-
-    const buffered = turf.buffer(rectangle.geometry, 0.01, { units: "kilometers" });
-    const [minX, minY, maxX, maxY] = turf.bbox(buffered);
-
-    map.getView().fit([minX, minY, maxX, maxY], {
-      padding: [20, 20, 20, 20],
-      duration: 1000,
-    });
-  };
-
-  const handleRectangleChange = (event) => {
-    const selectedIndex = event.target.value;
-    if (selectedIndex === "") {
-      setSelectedRectangle("");
-      setPuntosEnCuadro([]);
-      return;
+    } else {
+      setPuntosEnMunicipio([]);
     }
-    
-    const selectedRectangle = rectangles[selectedIndex];
-    setSelectedRectangle(selectedIndex);
-    buscarPuntosEnCuadro(selectedRectangle);
   };
 
   return (
-    <div className="container mt-4">
-      <div className="mb-3">
-        <label htmlFor="rectangleSelect" className="form-label">Selecciona un cuadro</label>
-        <select id="rectangleSelect" className="form-select" onChange={handleRectangleChange} value={selectedRectangle}>
-          <option value="">Selecciona un cuadro</option>
-          {rectangles.map((rectangle, index) => (
-            <option key={index} value={index}>
-              {rectangle.name}
-            </option>
-          ))}
-        </select>
-      </div>
+    <div>
+      <select onChange={handleMunicipioChange} value={selectedMunicipio}>
+        <option value="">Selecciona un municipio</option>
+        {municipiosData.features.map((municipio) => (
+          <option key={municipio.properties.CVEGEO} value={municipio.properties.CVEGEO}>
+            {municipio.properties.NOMGEO}
+          </option>
+        ))}
+      </select>
 
-      <div ref={mapRef} style={{ width: "100%", height: "500px" }} className="border border-primary" />
+      <div ref={mapRef} style={{ width: "100%", height: "500px" }} />
 
-      <div style={{ marginTop: "20px" }}>
-        <h3>Total de puntos en el cuadro: {puntosEnCuadro.length}</h3>
-        <ul className="list-group">
-          {puntosEnCuadro.map((feature, index) => {
-            const propiedades = feature.getProperties();
-            console.log("Propiedades del punto:", propiedades);
-
-            return (
-              <li key={index} className="list-group-item">
-                {propiedades.nom_estab || "Sin nombre"} -{" "}
-                {propiedades.nombre_act || "Actividad desconocida"}
-              </li>
-            );
-          })}
-        </ul>
-      </div>
+      {puntosEnMunicipio.length > 0 && (
+        <div style={{ marginTop: "20px" }}>
+          <h3>Puntos dentro del municipio:</h3>
+          <ul>
+            {puntosEnMunicipio.map((point, index) => {
+              const propiedades = point.properties;
+              return (
+                <li key={index}>
+                  {propiedades.nom_estab || "Sin nombre"} -{" "}
+                  {propiedades.nombre_act || "Actividad desconocida"}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
