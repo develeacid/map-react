@@ -6,7 +6,7 @@ import OSM from "ol/source/OSM";
 import VectorSource from "ol/source/Vector";
 import GeoJSON from "ol/format/GeoJSON";
 import { useGeographic } from "ol/proj";
-import HeatmapLayer from "ol/layer/Heatmap";
+import HeatmapLayer from "ol/layer/Heatmap"; //Libreria
 import datos from "./denue_inegi_20_.json";
 
 function Mapa() {
