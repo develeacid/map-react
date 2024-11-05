@@ -1,151 +1,196 @@
-// Importamos las librerías necesarias para el componente Mapa
-import React, { useEffect, useRef, useState } from "react"; // Importa funciones de React
-import "ol/ol.css"; // Importa estilos para OpenLayers
-import { Map, View } from "ol"; // Importa componentes de mapa y vista de OpenLayers
-import TileLayer from "ol/layer/Tile"; // Importa la capa de teselas
-import OSM from "ol/source/OSM"; // Importa la fuente de OpenStreetMap
-import VectorLayer from "ol/layer/Vector"; // Importa la capa vectorial
-import VectorSource from "ol/source/Vector"; // Importa la fuente vectorial
-import GeoJSON from "ol/format/GeoJSON"; // Importa el formato GeoJSON
-import { useGeographic } from "ol/proj"; // Importa el hook para la proyección geográfica
-import { Style, Stroke, Fill } from "ol/style"; // Importa estilos para la capa
-import * as turf from "@turf/turf"; // Importa la librería Turf.js para operaciones geoespaciales
-import datos from "./denue_inegi_20_.json"; // Importa los datos en formato GeoJSON
+import React, { useEffect, useRef, useState } from "react";
+import "ol/ol.css"; // Importa los estilos de OpenLayers
+import { Map, View } from "ol"; // Importa las clases Map y View de OpenLayers
+import TileLayer from "ol/layer/Tile"; // Importa la clase TileLayer para capas de teselas
+import OSM from "ol/source/OSM"; // Importa la fuente de teselas OpenStreetMap
+import VectorLayer from "ol/layer/Vector"; // Importa la clase VectorLayer para capas vectoriales
+import VectorSource from "ol/source/Vector"; // Importa la clase VectorSource para fuentes vectoriales
+import GeoJSON from "ol/format/GeoJSON"; // Importa el formato GeoJSON para leer datos GeoJSON
+import { useGeographic } from "ol/proj"; // Importa la función useGeographic para usar coordenadas geográficas
+import { Style, Stroke, Fill } from "ol/style"; // Importa clases de estilo para las características del mapa
+import * as turf from "@turf/turf"; // Importa la biblioteca Turf.js para operaciones geoespaciales
+import datos from "./denue_inegi_20_.json"; // Importa los datos GeoJSON desde un archivo local
 
 function Mapa() {
-  // Creamos una referencia para el elemento del mapa
-  const mapRef = useRef();
-  // Estado para el mapa
-  const [map, setMap] = useState(null);
-  // Estado para la fuente de datos vectoriales
-  const [vectorSource, setVectorSource] = useState(null);
-  // Estado para el rectángulo que selecciona los puntos
-  const [rectangle, setRectangle] = useState(null);
-  // Estado para los puntos que se encuentran dentro del rectángulo
-  const [puntosEnCuadro, setPuntosEnCuadro] = useState([]);
+  const mapRef = useRef(); // Referencia al elemento del mapa
+  const [map, setMap] = useState(null); // Estado para almacenar la instancia del mapa
+  const [vectorSource, setVectorSource] = useState(null); // Estado para almacenar la fuente vectorial
+  const [rectangles, setRectangles] = useState([]); // Estado para almacenar los cuadros (polígonos)
+  const [puntosEnCuadro, setPuntosEnCuadro] = useState([]); // Estado para almacenar los puntos dentro de un cuadro
 
-  // Usamos la proyección geográfica
-  useGeographic();
+  useGeographic(); // Indica a OpenLayers que se utilizarán coordenadas geográficas
 
-  // useEffect se ejecuta cuando el componente se monta
   useEffect(() => {
-    // Creamos una fuente vectorial inicial a partir de los datos GeoJSON
+    // Este useEffect se ejecuta solo una vez al montar el componente
+
+    // Crea una fuente vectorial con los datos GeoJSON importados
     const initialVectorSource = new VectorSource({
-      features: new GeoJSON().readFeatures(datos), // Leemos las características desde el GeoJSON
+      features: new GeoJSON().readFeatures(datos),
     });
 
-    // Creamos una capa vectorial a partir de la fuente
+    // Crea una capa vectorial con la fuente vectorial creada
     const vectorLayer = new VectorLayer({
       source: initialVectorSource,
     });
 
-    // Definimos los límites del rectángulo en coordenadas
-    const bounds = [
+    // Define las coordenadas de los cuadros (polígonos cerrados)
+    const bounds1 = [
       [-96.8, 17.0],
       [-96.8, 17.2],
       [-96.5, 17.2],
       [-96.5, 17.0],
-      [-96.8, 17.0],
+      [-96.8, 17.0], // Se cierra el polígono
     ];
-    // Creamos un polígono usando Turf.js a partir de los límites
-    const rectanglePolygon = turf.polygon([bounds]);
-    // Guardamos el polígono en el estado
-    setRectangle(rectanglePolygon);
 
-    // Leemos el polígono como una característica GeoJSON
-    const polygonFeature = new GeoJSON().readFeature(rectanglePolygon, {
-      dataProjection: "EPSG:4326", // Proyección de los datos
-      featureProjection: "EPSG:4326", // Proyección de la característica
-    });
+    const bounds2 = [
+      [-96.45, 17.0],
+      [-96.45, 17.2],
+      [-96.2, 17.2],
+      [-96.2, 17.0],
+      [-96.45, 17.0], // Se cierra el polígono
+    ];
 
-    // Creamos una fuente vectorial para el rectángulo
+    const bounds3 = [
+      [-96.6, 17.3],
+      [-96.6, 17.5],
+      [-96.4, 17.5],
+      [-96.4, 17.3],
+      [-96.6, 17.3], // Se cierra el polígono
+    ];
+
+    // Crea los polígonos utilizando Turf.js
+    const rectanglePolygons = [
+      turf.polygon([bounds1]),
+      turf.polygon([bounds2]),
+      turf.polygon([bounds3]),
+    ];
+
+    setRectangles(rectanglePolygons); // Guarda los polígonos en el estado
+
+    // Crea una fuente vectorial para los rectángulos
     const rectangleSource = new VectorSource({
-      features: [polygonFeature], // Usamos el polígono como característica
+      features: rectanglePolygons.map((polygon, index) => {
+        // Define estilos para cada rectángulo (rojo, verde, azul)
+        const styles = [
+          new Style({
+            fill: new Fill({
+              color: "rgba(255, 0, 0, 0.5)", // Rojo
+            }),
+            stroke: new Stroke({
+              color: "#000",
+              width: 2,
+            }),
+          }),
+          new Style({
+            fill: new Fill({
+              color: "rgba(0, 255, 0, 0.5)", // Verde
+            }),
+            stroke: new Stroke({
+              color: "#000",
+              width: 2,
+            }),
+          }),
+          new Style({
+            fill: new Fill({
+              color: "rgba(0, 0, 255, 0.5)", // Azul
+            }),
+            stroke: new Stroke({
+              color: "#000",
+              width: 2,
+            }),
+          }),
+        ];
+
+        // Convierte el polígono de Turf.js a una característica de OpenLayers
+        const feature = new GeoJSON().readFeature(polygon);
+        feature.setStyle(styles[index]); // Asigna el estilo correspondiente
+        return feature;
+      }),
     });
 
-    // Creamos una capa vectorial para el rectángulo
+    // Crea una capa vectorial para los rectángulos
     const rectangleLayer = new VectorLayer({
       source: rectangleSource,
-      style: new Style({
-        // Estilo para el rectángulo
-        stroke: new Stroke({
-          // Contorno del rectángulo
-          color: "blue", // Color del contorno
-          width: 2, // Ancho del contorno
-        }),
-        fill: new Fill({
-          // Relleno del rectángulo
-          color: "rgba(0, 0, 255, 0.1)", // Color con transparencia
-        }),
-      }),
     });
 
-    // Creamos el mapa inicial
+    // Crea una instancia del mapa de OpenLayers
     const initialMap = new Map({
-      target: mapRef.current, // Referencia al contenedor del mapa
+      target: mapRef.current, // Elemento donde se renderizará el mapa
       layers: [
-        // Capas del mapa
         new TileLayer({
-          source: new OSM(), // Capa de fondo de OpenStreetMap
+          source: new OSM(), // Capa base de OpenStreetMap
         }),
-        vectorLayer, // Capa de los puntos
-        rectangleLayer, // Capa del rectángulo
+        vectorLayer, // Capa vectorial con los datos GeoJSON
+        rectangleLayer, // Capa vectorial con los rectángulos
       ],
       view: new View({
-        // Configuración de la vista
-        center: [-96.769722, 17.066167], // Centro del mapa
-        zoom: 9, // Nivel de zoom
+        center: [-96.769722, 17.066167], // Coordenadas del centro inicial
+        zoom: 9, // Nivel de zoom inicial
       }),
     });
 
-    // Actualizamos el estado del mapa y la fuente vectorial
-    setMap(initialMap);
-    setVectorSource(initialVectorSource);
+    setMap(initialMap); // Guarda la instancia del mapa en el estado
+    setVectorSource(initialVectorSource); // Guarda la fuente vectorial en el estado
 
-    // Función de limpieza para cuando el componente se desmonta
+    // Función de limpieza que se ejecuta al desmontar el componente
     return () => {
-      initialMap.setTarget(null); // Limpiamos el objetivo del mapa
-      initialMap.getLayers().clear(); // Limpiamos las capas del mapa
-      initialMap.dispose(); // Destruimos el mapa
+      initialMap.setTarget(null); // Elimina el mapa del elemento
+      initialMap.getLayers().clear(); // Limpia las capas del mapa
+      initialMap.dispose(); // Libera recursos del mapa
     };
-  }, []); // Solo se ejecuta al montar el componente
+  }, []); // El array vacío indica que este useEffect se ejecuta solo una vez
 
-  // Función para buscar puntos dentro del rectángulo
-  const buscarPuntosEnCuadro = () => {
-    // Verificamos que el mapa y las fuentes están disponibles
-    if (!map || !vectorSource || !rectangle) return;
+  // Función para buscar puntos dentro de un rectángulo
+  const buscarPuntosEnCuadro = (rectangle) => {
+    if (!map || !vectorSource || !rectangle) return; // Verifica si las variables están definidas
 
-    // Filtramos los puntos que están dentro del rectángulo
+    // Filtra las características de la fuente vectorial que están dentro del rectángulo
     const puntosEnCuadro = vectorSource.getFeatures().filter((feature) => {
-      const point = turf.point(feature.getGeometry().getCoordinates()); // Creamos un punto de Turf.js
-      return turf.booleanPointInPolygon(point, rectangle); // Comprobamos si el punto está dentro del polígono
+      const coords = feature.getGeometry().getCoordinates();
+      if (!coords || coords.length === 0) {
+        console.warn("Coordenadas del punto no válidas:", coords);
+        return false;
+      }
+
+      // Crea un punto con Turf.js utilizando las coordenadas de la característica
+      const point = turf.point(coords);
+      const polygon = rectangle.geometry; // Obtiene la geometría del rectángulo
+      if (!polygon) {
+        console.warn("Polígono no definido para el rectángulo:", rectangle);
+        return false;
+      }
+
+      // Utiliza Turf.js para verificar si el punto está dentro del polígono
+      return turf.booleanPointInPolygon(point, polygon);
     });
 
-    // Actualizamos el estado con los puntos encontrados
-    setPuntosEnCuadro(puntosEnCuadro);
+    setPuntosEnCuadro(puntosEnCuadro); // Guarda los puntos encontrados en el estado
   };
 
   return (
     <div>
-      {/* Botón para buscar puntos dentro del cuadro */}
-      <button onClick={buscarPuntosEnCuadro}>Buscar puntos en el cuadro</button>
+      {/* Renderiza botones para cada rectángulo */}
+      {rectangles.map((rectangle, index) => (
+        <button key={index} onClick={() => buscarPuntosEnCuadro(rectangle)}>
+          Buscar puntos en{" "}
+          {index === 0 ? "Rojo" : index === 1 ? "Verde" : "Azul"}
+        </button>
+      ))}
 
-      {/* Contenedor del mapa */}
+      {/* Elemento donde se renderizará el mapa */}
       <div ref={mapRef} style={{ width: "100%", height: "500px" }} />
 
-      {/* Sección para mostrar resultados */}
+      {/* Muestra la cantidad de puntos encontrados y sus propiedades */}
       <div style={{ marginTop: "20px" }}>
         <h3>Total de puntos en el cuadro: {puntosEnCuadro.length}</h3>
         <ul>
           {puntosEnCuadro.map((feature, index) => {
-            const propiedades = feature.getProperties(); // Obtenemos las propiedades de la característica
-            console.log("Propiedades del punto:", propiedades); // Mostramos las propiedades en la consola
+            const propiedades = feature.getProperties();
+            console.log("Propiedades del punto:", propiedades);
 
             return (
               <li key={index}>
-                {/* Mostramos el nombre del establecimiento o un mensaje alternativo */}
                 {propiedades.nom_estab || "Sin nombre"} -{" "}
-                {/* Mostramos la actividad o un mensaje alternativo */}
                 {propiedades.nombre_act || "Actividad desconocida"}
               </li>
             );
@@ -156,4 +201,4 @@ function Mapa() {
   );
 }
 
-export default Mapa; // Exportamos el componente Mapa
+export default Mapa;
