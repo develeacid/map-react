@@ -15,8 +15,10 @@ function Mapa() {
   const mapRef = useRef();
   const [map, setMap] = useState(null);
   const [vectorSource, setVectorSource] = useState(null);
+  const [rectangleLayer, setRectangleLayer] = useState(null);
   const [rectangles, setRectangles] = useState([]);
   const [puntosEnCuadro, setPuntosEnCuadro] = useState([]);
+  const [selectedRectangle, setSelectedRectangle] = useState("");
 
   useGeographic();
 
@@ -29,83 +31,71 @@ function Mapa() {
       source: initialVectorSource,
     });
 
-    const bounds1 = [
-      [-96.8, 17.0],
-      [-96.8, 17.2],
-      [-96.5, 17.2],
-      [-96.5, 17.0],
-      [-96.8, 17.0], // Cerramos el polígono
-    ];
-    
-    const bounds2 = [
-      [ // Primer polígono en el multipolígono
-        [-96.75, 17.05],
-        [-96.75, 17.10],
-        [-96.70, 17.10],
-        [-96.70, 17.05],
-        [-96.75, 17.05], // Cerramos el primer polígono
-      ],
-      [ // Segundo polígono en el multipolígono
-        [-96.68, 17.12],
-        [-96.68, 17.15],
-        [-96.65, 17.15],
-        [-96.65, 17.12],
-        [-96.68, 17.12], // Cerramos el segundo polígono
-      ]
-    ];
-    
-    const bounds3 = [
-      [-96.7, 17.1],
-      [-96.7, 17.25],
-      [-96.55, 17.25],
-      [-96.55, 17.1],
-      [-96.7, 17.1], // Cerramos el polígono
-    ];
-    
-    // Creación de los polígonos (notar el uso de multiPolygon para bounds2)
+    // Definimos los bounds para cada rectángulo con nombres y colores
     const rectanglePolygons = [
-      turf.polygon([bounds1]),
-      turf.multiPolygon([bounds2]), // Aquí creamos el multipolígono
-      turf.polygon([bounds3]),
+      { 
+        // Convierte el primer rectángulo en un MultiPolygon
+        geometry: turf.multiPolygon([
+          [[
+            [-96.8, 17.0],
+            [-96.8, 17.1],
+            [-96.7, 17.1],
+            [-96.7, 17.0],
+            [-96.8, 17.0],
+          ]],
+          [[
+            [-96.65, 17.0],
+            [-96.65, 17.1],
+            [-96.55, 17.1],
+            [-96.55, 17.0],
+            [-96.65, 17.0],
+          ]]
+        ]),
+        color: "rgba(255, 0, 0, 0.3)", 
+        name: "Rojo (MultiPolygon)"
+      },
+      { 
+        geometry: turf.polygon([[
+          [-96.75, 17.05],
+          [-96.75, 17.15],
+          [-96.45, 17.15],
+          [-96.45, 17.05],
+          [-96.75, 17.05],
+        ]]), 
+        color: "rgba(0, 255, 0, 0.3)", 
+        name: "Verde"
+      },
+      { 
+        geometry: turf.polygon([[
+          [-96.7, 17.1],
+          [-96.7, 17.25],
+          [-96.55, 17.25],
+          [-96.55, 17.1],
+          [-96.7, 17.1],
+        ]]), 
+        color: "rgba(0, 0, 255, 0.3)", 
+        name: "Azul"
+      },
     ];
 
     setRectangles(rectanglePolygons);
 
-    // Agregar los polígonos a un nuevo VectorSource
     const rectangleSource = new VectorSource({
-      features: rectanglePolygons.map((polygon, index) => {
-        const styles = [
+      features: rectanglePolygons.map((rect) => {
+        const feature = new GeoJSON().readFeature(rect.geometry, {
+          featureProjection: "EPSG:4326",
+        });
+        feature.setStyle(
           new Style({
             fill: new Fill({
-              color: 'rgba(255, 0, 0, 0.5)', // Rojo
+              color: rect.color,
             }),
             stroke: new Stroke({
-              color: '#000',
+              color: "#333",
               width: 2,
             }),
-          }),
-          new Style({
-            fill: new Fill({
-              color: 'rgba(0, 255, 0, 0.5)', // Verde
-            }),
-            stroke: new Stroke({
-              color: '#000',
-              width: 2,
-            }),
-          }),
-          new Style({
-            fill: new Fill({
-              color: 'rgba(0, 0, 255, 0.5)', // Azul
-            }),
-            stroke: new Stroke({
-              color: '#000',
-              width: 2,
-            }),
-          }),
-        ];
-
-        const feature = new GeoJSON().readFeature(polygon);
-        feature.setStyle(styles[index]);
+          })
+        );
         return feature;
       }),
     });
@@ -131,6 +121,7 @@ function Mapa() {
 
     setMap(initialMap);
     setVectorSource(initialVectorSource);
+    setRectangleLayer(rectangleLayer);
 
     return () => {
       initialMap.setTarget(null);
@@ -141,47 +132,66 @@ function Mapa() {
 
   const buscarPuntosEnCuadro = (rectangle) => {
     if (!map || !vectorSource || !rectangle) return;
-  
+
     const puntosEnCuadro = vectorSource.getFeatures().filter((feature) => {
       const coords = feature.getGeometry().getCoordinates();
       if (!coords || coords.length === 0) {
         console.warn("Coordenadas del punto no válidas:", coords);
         return false;
       }
-  
+
       const point = turf.point(coords);
       const polygon = rectangle.geometry;
-  
+
       if (!polygon) {
         console.warn("Polígono no definido para el rectángulo:", rectangle);
         return false;
       }
-  
-      // Si es multipolígono, verificamos cada polígono interno
+
       if (polygon.type === "MultiPolygon") {
         return polygon.coordinates.some((subPolygon) => {
           const individualPolygon = turf.polygon(subPolygon);
           return turf.booleanPointInPolygon(point, individualPolygon);
         });
       }
-  
-      // Si no es multipolígono, verificamos directamente
+
       return turf.booleanPointInPolygon(point, polygon);
     });
-  
+
     setPuntosEnCuadro(puntosEnCuadro);
-  };  
+
+    const buffered = turf.buffer(rectangle.geometry, 0.01, { units: "kilometers" });
+    const [minX, minY, maxX, maxY] = turf.bbox(buffered);
+
+    map.getView().fit([minX, minY, maxX, maxY], {
+      padding: [20, 20, 20, 20],
+      duration: 1000,
+    });
+  };
+
+  const handleRectangleChange = (event) => {
+    const selectedIndex = event.target.value;
+    if (selectedIndex === "") {
+      setSelectedRectangle("");
+      setPuntosEnCuadro([]);
+      return;
+    }
+    
+    const selectedRectangle = rectangles[selectedIndex];
+    setSelectedRectangle(selectedIndex);
+    buscarPuntosEnCuadro(selectedRectangle);
+  };
 
   return (
     <div>
-      {rectangles.map((rectangle, index) => (
-        <button
-          key={index}
-          onClick={() => buscarPuntosEnCuadro(rectangle)}
-        >
-          Buscar puntos en {index === 0 ? "Rojo" : index === 1 ? "Verde" : "Azul"}
-        </button>
-      ))}
+      <select onChange={handleRectangleChange} value={selectedRectangle}>
+        <option value="">Selecciona un cuadro</option>
+        {rectangles.map((rectangle, index) => (
+          <option key={index} value={index}>
+            {rectangle.name}
+          </option>
+        ))}
+      </select>
 
       <div ref={mapRef} style={{ width: "100%", height: "500px" }} />
 
