@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import "ol/ol.css";
+import "bootstrap/dist/css/bootstrap.min.css"; // Importa Bootstrap
 import { Map, View } from "ol";
 import TileLayer from "ol/layer/Tile";
 import OSM from "ol/source/OSM";
@@ -34,45 +35,17 @@ function Mapa() {
     // Definimos los bounds para cada rectángulo con nombres y colores
     const rectanglePolygons = [
       { 
-        // Convierte el primer rectángulo en un MultiPolygon
-        geometry: turf.multiPolygon([
-          [[
-            [-96.8, 17.0],
-            [-96.8, 17.1],
-            [-96.7, 17.1],
-            [-96.7, 17.0],
-            [-96.8, 17.0],
-          ]],
-          [[
-            [-96.65, 17.0],
-            [-96.65, 17.1],
-            [-96.55, 17.1],
-            [-96.55, 17.0],
-            [-96.65, 17.0],
-          ]]
-        ]),
+        geometry: turf.multiPolygon([[[[-96.8, 17.0], [-96.8, 17.1], [-96.7, 17.1], [-96.7, 17.0], [-96.8, 17.0]]], [[[-96.65, 17.0], [-96.65, 17.1], [-96.55, 17.1], [-96.55, 17.0], [-96.65, 17.0]]]]),
         color: "rgba(255, 0, 0, 0.3)", 
         name: "Rojo (MultiPolygon)"
       },
       { 
-        geometry: turf.polygon([[
-          [-96.75, 17.05],
-          [-96.75, 17.15],
-          [-96.45, 17.15],
-          [-96.45, 17.05],
-          [-96.75, 17.05],
-        ]]), 
+        geometry: turf.polygon([[[-96.75, 17.05], [-96.75, 17.15], [-96.45, 17.15], [-96.45, 17.05], [-96.75, 17.05]]]), 
         color: "rgba(0, 255, 0, 0.3)", 
         name: "Verde"
       },
       { 
-        geometry: turf.polygon([[
-          [-96.7, 17.1],
-          [-96.7, 17.25],
-          [-96.55, 17.25],
-          [-96.55, 17.1],
-          [-96.7, 17.1],
-        ]]), 
+        geometry: turf.polygon([[[-96.7, 17.1], [-96.7, 17.25], [-96.55, 17.25], [-96.55, 17.1], [-96.7, 17.1]]]), 
         color: "rgba(0, 0, 255, 0.3)", 
         name: "Azul"
       },
@@ -183,27 +156,30 @@ function Mapa() {
   };
 
   return (
-    <div>
-      <select onChange={handleRectangleChange} value={selectedRectangle}>
-        <option value="">Selecciona un cuadro</option>
-        {rectangles.map((rectangle, index) => (
-          <option key={index} value={index}>
-            {rectangle.name}
-          </option>
-        ))}
-      </select>
+    <div className="container mt-4">
+      <div className="mb-3">
+        <label htmlFor="rectangleSelect" className="form-label">Selecciona un cuadro</label>
+        <select id="rectangleSelect" className="form-select" onChange={handleRectangleChange} value={selectedRectangle}>
+          <option value="">Selecciona un cuadro</option>
+          {rectangles.map((rectangle, index) => (
+            <option key={index} value={index}>
+              {rectangle.name}
+            </option>
+          ))}
+        </select>
+      </div>
 
-      <div ref={mapRef} style={{ width: "100%", height: "500px" }} />
+      <div ref={mapRef} style={{ width: "100%", height: "500px" }} className="border border-primary" />
 
       <div style={{ marginTop: "20px" }}>
         <h3>Total de puntos en el cuadro: {puntosEnCuadro.length}</h3>
-        <ul>
+        <ul className="list-group">
           {puntosEnCuadro.map((feature, index) => {
             const propiedades = feature.getProperties();
             console.log("Propiedades del punto:", propiedades);
 
             return (
-              <li key={index}>
+              <li key={index} className="list-group-item">
                 {propiedades.nom_estab || "Sin nombre"} -{" "}
                 {propiedades.nombre_act || "Actividad desconocida"}
               </li>
