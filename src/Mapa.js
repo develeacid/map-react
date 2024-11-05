@@ -29,35 +29,43 @@ function Mapa() {
       source: initialVectorSource,
     });
 
-    // Definición de los cuadros (polígonos cerrados)
     const bounds1 = [
       [-96.8, 17.0],
       [-96.8, 17.2],
       [-96.5, 17.2],
       [-96.5, 17.0],
-      [-96.8, 17.0], // Se cierra el polígono
+      [-96.8, 17.0], // Cerramos el polígono
     ];
-
+    
     const bounds2 = [
-      [-96.45, 17.0],
-      [-96.45, 17.2],
-      [-96.2, 17.2],
-      [-96.2, 17.0],
-      [-96.45, 17.0], // Se cierra el polígono
+      [ // Primer polígono en el multipolígono
+        [-96.75, 17.05],
+        [-96.75, 17.10],
+        [-96.70, 17.10],
+        [-96.70, 17.05],
+        [-96.75, 17.05], // Cerramos el primer polígono
+      ],
+      [ // Segundo polígono en el multipolígono
+        [-96.68, 17.12],
+        [-96.68, 17.15],
+        [-96.65, 17.15],
+        [-96.65, 17.12],
+        [-96.68, 17.12], // Cerramos el segundo polígono
+      ]
     ];
-
+    
     const bounds3 = [
-      [-96.6, 17.3],
-      [-96.6, 17.5],
-      [-96.4, 17.5],
-      [-96.4, 17.3],
-      [-96.6, 17.3], // Se cierra el polígono
+      [-96.7, 17.1],
+      [-96.7, 17.25],
+      [-96.55, 17.25],
+      [-96.55, 17.1],
+      [-96.7, 17.1], // Cerramos el polígono
     ];
-
-    // Crear los polígonos
+    
+    // Creación de los polígonos (notar el uso de multiPolygon para bounds2)
     const rectanglePolygons = [
       turf.polygon([bounds1]),
-      turf.polygon([bounds2]),
+      turf.multiPolygon([bounds2]), // Aquí creamos el multipolígono
       turf.polygon([bounds3]),
     ];
 
@@ -133,42 +141,36 @@ function Mapa() {
 
   const buscarPuntosEnCuadro = (rectangle) => {
     if (!map || !vectorSource || !rectangle) return;
-
+  
     const puntosEnCuadro = vectorSource.getFeatures().filter((feature) => {
       const coords = feature.getGeometry().getCoordinates();
       if (!coords || coords.length === 0) {
         console.warn("Coordenadas del punto no válidas:", coords);
         return false;
       }
-
+  
       const point = turf.point(coords);
-      const polygon = rectangle.geometry; // Asegúrate de que el polígono está definido
+      const polygon = rectangle.geometry;
+  
       if (!polygon) {
         console.warn("Polígono no definido para el rectángulo:", rectangle);
         return false;
       }
-
+  
+      // Si es multipolígono, verificamos cada polígono interno
+      if (polygon.type === "MultiPolygon") {
+        return polygon.coordinates.some((subPolygon) => {
+          const individualPolygon = turf.polygon(subPolygon);
+          return turf.booleanPointInPolygon(point, individualPolygon);
+        });
+      }
+  
+      // Si no es multipolígono, verificamos directamente
       return turf.booleanPointInPolygon(point, polygon);
     });
-
+  
     setPuntosEnCuadro(puntosEnCuadro);
-
-    // Calcular la extensión del polígono y añadir un margen
-    const extent = turf.bbox(rectangle);
-    const margen = 0.01; // Ajusta este valor para el margen que desees
-    const extendedExtent = [
-      extent[0] - margen, // minX
-      extent[1] - margen, // minY
-      extent[2] + margen, // maxX
-      extent[3] + margen, // maxY
-    ];
-
-    // Centrar el mapa en el nuevo rango
-    map.getView().fit(extendedExtent, {
-      duration: 1000, // Animación de 1 segundo
-      maxZoom: 12, // Ajusta el zoom máximo como desees
-    });
-  };
+  };  
 
   return (
     <div>
