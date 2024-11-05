@@ -8,19 +8,19 @@ import VectorSource from "ol/source/Vector";
 import GeoJSON from "ol/format/GeoJSON";
 import { useGeographic } from "ol/proj";
 import { Style, Stroke, Fill } from "ol/style";
-import * as turf from "@turf/turf"; // Importa Turf.js para operaciones geoespaciales
+import * as turf from "@turf/turf";
 import datos from "./denue_inegi_20_.json";
 
 function Mapa() {
   const mapRef = useRef();
   const [map, setMap] = useState(null);
   const [vectorSource, setVectorSource] = useState(null);
-  const [rectangle, setRectangle] = useState(null); // Definir el cuadro como estado
+  const [rectangle, setRectangle] = useState(null);
+  const [puntosEnCuadro, setPuntosEnCuadro] = useState([]);
 
   useGeographic();
 
   useEffect(() => {
-    // Capa de puntos de unidades económicas
     const initialVectorSource = new VectorSource({
       features: new GeoJSON().readFeatures(datos),
     });
@@ -29,16 +29,15 @@ function Mapa() {
       source: initialVectorSource,
     });
 
-    // Crear un cuadro de prueba (polígono rectangular)
     const bounds = [
-      [-96.8, 17.0], // Esquina inferior izquierda
-      [-96.8, 17.2], // Esquina superior izquierda
-      [-96.5, 17.2], // Esquina superior derecha
-      [-96.5, 17.0], // Esquina inferior derecha
-      [-96.8, 17.0], // Volver a la esquina inferior izquierda para cerrar el polígono
+      [-96.8, 17.0],
+      [-96.8, 17.2],
+      [-96.5, 17.2],
+      [-96.5, 17.0],
+      [-96.8, 17.0],
     ];
     const rectanglePolygon = turf.polygon([bounds]);
-    setRectangle(rectanglePolygon); // Guardar el polígono en el estado
+    setRectangle(rectanglePolygon);
 
     const polygonFeature = new GeoJSON().readFeature(rectanglePolygon, {
       dataProjection: "EPSG:4326",
@@ -62,7 +61,6 @@ function Mapa() {
       }),
     });
 
-    // Inicializar el mapa
     const initialMap = new Map({
       target: mapRef.current,
       layers: [
@@ -73,7 +71,7 @@ function Mapa() {
         rectangleLayer,
       ],
       view: new View({
-        center: [-96.769722, 17.066167], // Centro en Oaxaca
+        center: [-96.769722, 17.066167],
         zoom: 9,
       }),
     });
@@ -81,7 +79,6 @@ function Mapa() {
     setMap(initialMap);
     setVectorSource(initialVectorSource);
 
-    // Limpieza al desmontar
     return () => {
       initialMap.setTarget(null);
       initialMap.getLayers().clear();
@@ -89,7 +86,6 @@ function Mapa() {
     };
   }, []);
 
-  // Función para buscar puntos dentro del cuadro
   const buscarPuntosEnCuadro = () => {
     if (!map || !vectorSource || !rectangle) return;
 
@@ -98,15 +94,31 @@ function Mapa() {
       return turf.booleanPointInPolygon(point, rectangle);
     });
 
-    // Mostrar solo los puntos dentro del cuadro
-    vectorSource.clear();
-    vectorSource.addFeatures(puntosEnCuadro);
+    setPuntosEnCuadro(puntosEnCuadro);
   };
 
   return (
     <div>
       <button onClick={buscarPuntosEnCuadro}>Buscar puntos en el cuadro</button>
+
       <div ref={mapRef} style={{ width: "100%", height: "500px" }} />
+
+      <div style={{ marginTop: "20px" }}>
+        <h3>Total de puntos en el cuadro: {puntosEnCuadro.length}</h3>
+        <ul>
+          {puntosEnCuadro.map((feature, index) => {
+            const propiedades = feature.getProperties(); // Obtén las propiedades directamente
+            console.log("Propiedades del punto:", propiedades);
+
+            return (
+              <li key={index}>
+                {propiedades.nom_estab || "Sin nombre"} -{" "}
+                {propiedades.nombre_act || "Actividad desconocida"}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
     </div>
   );
 }
