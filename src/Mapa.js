@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import "ol/ol.css";
 import { Map, View } from "ol";
 import TileLayer from "ol/layer/Tile";
@@ -7,104 +7,107 @@ import VectorLayer from "ol/layer/Vector";
 import VectorSource from "ol/source/Vector";
 import GeoJSON from "ol/format/GeoJSON";
 import { useGeographic } from "ol/proj";
+import { Style, Stroke, Fill } from "ol/style";
+import * as turf from "@turf/turf"; // Importa Turf.js para operaciones geoespaciales
 import datos from "./denue_inegi_20_.json";
-import { Style, Icon } from "ol/style";
-import Overlay from "ol/Overlay";
 
 function Mapa() {
   const mapRef = useRef();
-  const popupRef = useRef();
+  const [map, setMap] = useState(null);
+  const [vectorSource, setVectorSource] = useState(null);
+  const [rectangle, setRectangle] = useState(null); // Definir el cuadro como estado
 
   useGeographic();
 
   useEffect(() => {
-    // Estilo personalizado para los puntos
-    const pointStyle = new Style({
-      image: new Icon({
-        src: "https://cdn-icons-png.flaticon.com/512/684/684908.png", // URL del ícono personalizado
-        scale: 0.05, // Tamaño del ícono
-      }),
+    // Capa de puntos de unidades económicas
+    const initialVectorSource = new VectorSource({
+      features: new GeoJSON().readFeatures(datos),
     });
 
-    // Capa de vectores con el estilo personalizado
     const vectorLayer = new VectorLayer({
-      source: new VectorSource({
-        features: new GeoJSON().readFeatures(datos),
+      source: initialVectorSource,
+    });
+
+    // Crear un cuadro de prueba (polígono rectangular)
+    const bounds = [
+      [-96.8, 17.0], // Esquina inferior izquierda
+      [-96.8, 17.2], // Esquina superior izquierda
+      [-96.5, 17.2], // Esquina superior derecha
+      [-96.5, 17.0], // Esquina inferior derecha
+      [-96.8, 17.0], // Volver a la esquina inferior izquierda para cerrar el polígono
+    ];
+    const rectanglePolygon = turf.polygon([bounds]);
+    setRectangle(rectanglePolygon); // Guardar el polígono en el estado
+
+    const polygonFeature = new GeoJSON().readFeature(rectanglePolygon, {
+      dataProjection: "EPSG:4326",
+      featureProjection: "EPSG:4326",
+    });
+
+    const rectangleSource = new VectorSource({
+      features: [polygonFeature],
+    });
+
+    const rectangleLayer = new VectorLayer({
+      source: rectangleSource,
+      style: new Style({
+        stroke: new Stroke({
+          color: "blue",
+          width: 2,
+        }),
+        fill: new Fill({
+          color: "rgba(0, 0, 255, 0.1)",
+        }),
       }),
-      style: pointStyle,
     });
 
-    // Capa base
-    const tileLayer = new TileLayer({
-      source: new OSM(),
-    });
-
-    // Crear el mapa
-    const map = new Map({
+    // Inicializar el mapa
+    const initialMap = new Map({
       target: mapRef.current,
-      layers: [tileLayer, vectorLayer],
+      layers: [
+        new TileLayer({
+          source: new OSM(),
+        }),
+        vectorLayer,
+        rectangleLayer,
+      ],
       view: new View({
-        center: [-96.769722, 17.066167],
-        zoom: 7,
+        center: [-96.769722, 17.066167], // Centro en Oaxaca
+        zoom: 9,
       }),
     });
 
-    // Crear overlay para los popups
-    const popupOverlay = new Overlay({
-      element: popupRef.current,
-      positioning: "bottom-center",
-      stopEvent: false,
-      offset: [0, -10],
-    });
-    map.addOverlay(popupOverlay);
+    setMap(initialMap);
+    setVectorSource(initialVectorSource);
 
-    // Manejador de clic para mostrar popup
-    map.on("click", (event) => {
-      const feature = map.forEachFeatureAtPixel(event.pixel, (feat) => feat);
-      if (feature) {
-        const coords = feature.getGeometry().getCoordinates();
-        popupOverlay.setPosition(coords);
-
-        // Extraer los datos del JSON para el popup
-        const properties = feature.getProperties();
-        const nombreEstab = properties.nom_estab || "Sin nombre";
-        const actividad = properties.nombre_act || "Actividad no especificada";
-        const perOcupadas = properties.per_ocu || "No especificado";
-        const municipio = properties.municipio || "No especificado";
-        const localidad = properties.localidad || "No especificado";
-
-        // Crear el contenido del popup
-        popupRef.current.innerHTML = `
-          <div style="font-size: 14px;">
-            <strong>${nombreEstab}</strong><br/>
-            <em>${actividad}</em><br/>
-            <strong>Personal ocupado:</strong> ${perOcupadas}<br/>
-            <strong>Municipio:</strong> ${municipio}<br/>
-            <strong>Localidad:</strong> ${localidad}
-          </div>
-        `;
-      } else {
-        popupOverlay.setPosition(undefined);
-      }
-    });
-
-    return () => map.setTarget(undefined); // Limpiar el mapa al desmontar
+    // Limpieza al desmontar
+    return () => {
+      initialMap.setTarget(null);
+      initialMap.getLayers().clear();
+      initialMap.dispose();
+    };
   }, []);
 
+  // Función para buscar puntos dentro del cuadro
+  const buscarPuntosEnCuadro = () => {
+    if (!map || !vectorSource || !rectangle) return;
+
+    const puntosEnCuadro = vectorSource.getFeatures().filter((feature) => {
+      const point = turf.point(feature.getGeometry().getCoordinates());
+      return turf.booleanPointInPolygon(point, rectangle);
+    });
+
+    // Mostrar solo los puntos dentro del cuadro
+    vectorSource.clear();
+    vectorSource.addFeatures(puntosEnCuadro);
+  };
+
   return (
-    <>
+    <div>
+      <button onClick={buscarPuntosEnCuadro}>Buscar puntos en el cuadro</button>
       <div ref={mapRef} style={{ width: "100%", height: "500px" }} />
-      <div
-        ref={popupRef}
-        style={{
-          backgroundColor: "white",
-          padding: "10px",
-          borderRadius: "5px",
-          boxShadow: "0px 0px 10px rgba(0,0,0,0.5)",
-          minWidth: "150px",
-        }}
-      />
-    </>
+    </div>
   );
 }
 
