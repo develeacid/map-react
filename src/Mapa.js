@@ -19,6 +19,7 @@ function Mapa() {
   const [denueLayer, setDenueLayer] = useState(null); // Estado para almacenar la capa de puntos del DENUE
   const [polygonsData, setPolygonsData] = useState([]); // Estado para almacenar los datos de los polígonos dibujados y los puntos dentro de ellos
   const [drawingActive, setDrawingActive] = useState(false); // Estado para controlar si la herramienta de dibujo está activa
+  const [savedQueries, setSavedQueries] = useState([]); // Estado para almacenar las consultas guardadas (simulación de base de datos)
 
   useGeographic(); // Indica a OpenLayers que se utilizarán coordenadas geográficas
 
@@ -143,9 +144,32 @@ function Mapa() {
     setPolygonsData([]); // Limpia el estado polygonsData
   };
 
+  // Función para guardar la consulta actual (polígonos dibujados)
+  const handleSaveQuery = () => {
+    setSavedQueries((prevSavedQueries) => [
+      ...prevSavedQueries, // Mantiene las consultas anteriores
+      { polygonsData }, // Agrega la nueva consulta con los datos de los polígonos
+    ]);
+    alert("Consulta guardada exitosamente.");
+  };
+
+  // Función para cargar una consulta guardada
+  const handleLoadQuery = (index) => {
+    const selectedQuery = savedQueries[index]; // Obtiene la consulta seleccionada
+    setPolygonsData(selectedQuery.polygonsData); // Actualiza el estado con los datos de la consulta
+
+    drawLayer.getSource().clear(); // Limpia la capa de dibujo antes de cargar la consulta
+    selectedQuery.polygonsData.forEach((data) => {
+      // Crea una característica de OpenLayers a partir de los datos del polígono
+      const feature = new GeoJSON().readFeature(turf.polygon(data.polygon), {
+        featureProjection: "EPSG:3857", // Proyección del mapa
+      });
+      drawLayer.getSource().addFeature(feature); // Agrega la característica a la capa de dibujo
+    });
+  };
+
   return (
     <div>
-      {/* Instrucciones de uso */}
       <div
         style={{
           padding: "10px",
@@ -175,26 +199,41 @@ function Mapa() {
         </button>
         <button
           onClick={handleClearSearch}
+          disabled={polygonsData.length === 0}
           style={{
             padding: "8px 16px",
-            backgroundColor: "#dc3545",
+            backgroundColor: polygonsData.length === 0 ? "#ccc" : "#dc3545",
             color: "white",
             border: "none",
             borderRadius: "4px",
-            cursor: "pointer",
+            cursor: polygonsData.length === 0 ? "not-allowed" : "pointer",
+            marginRight: "10px",
           }}
         >
           Limpiar búsqueda
         </button>
+        <button
+          onClick={handleSaveQuery}
+          disabled={polygonsData.length === 0}
+          style={{
+            padding: "8px 16px",
+            backgroundColor: polygonsData.length === 0 ? "#ccc" : "#28a745",
+            color: "white",
+            border: "none",
+            borderRadius: "4px",
+            cursor: polygonsData.length === 0 ? "not-allowed" : "pointer",
+            marginLeft: "10px",
+          }}
+        >
+          Guardar consulta
+        </button>
       </div>
 
-      {/* Elemento donde se renderizará el mapa */}
       <div
         ref={mapRef}
         style={{ width: "100%", height: "500px", marginBottom: "20px" }}
       />
 
-      {/* Lista de resultados por polígono */}
       {polygonsData.length > 0 && (
         <div style={{ marginTop: "20px" }}>
           <h3>Resultados de búsqueda por polígono:</h3>
@@ -213,6 +252,30 @@ function Mapa() {
                 })}
               </ul>
             </div>
+          ))}
+        </div>
+      )}
+
+      {savedQueries.length > 0 && (
+        <div style={{ marginTop: "20px" }}>
+          <h3>Consultas guardadas:</h3>
+          {savedQueries.map((query, index) => (
+            <button
+              key={index}
+              onClick={() => handleLoadQuery(index)}
+              style={{
+                display: "block",
+                marginBottom: "10px",
+                padding: "8px 16px",
+                backgroundColor: "#ffc107",
+                color: "black",
+                border: "none",
+                borderRadius: "4px",
+                cursor: "pointer",
+              }}
+            >
+              Cargar consulta {index + 1}
+            </button>
           ))}
         </div>
       )}
