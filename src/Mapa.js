@@ -8,16 +8,17 @@ import VectorSource from "ol/source/Vector"; // Importa la clase VectorSource pa
 import GeoJSON from "ol/format/GeoJSON"; // Importa el formato GeoJSON para leer datos GeoJSON
 import { useGeographic } from "ol/proj"; // Importa la función useGeographic para usar coordenadas geográficas
 import { Style, Stroke, Fill, Circle as OlCircle } from "ol/style"; // Importa clases de estilo para las características del mapa, incluyendo Circle
-import { Draw } from "ol/interaction"; // Importa la interacción Draw para dibujar en el mapa
+import Draw from "ol/interaction/Draw"; // Importa la interacción Draw para dibujar en el mapa
 import * as turf from "@turf/turf"; // Importa la biblioteca Turf.js para operaciones geoespaciales
 import puntosData from "./denue_inegi_20_.json"; // Importa los datos de puntos del DENUE
 
 function Mapa() {
   const mapRef = useRef(); // Referencia al elemento del mapa
   const [map, setMap] = useState(null); // Estado para almacenar la instancia del mapa
+  const [drawLayer, setDrawLayer] = useState(null); // Estado para almacenar la capa donde se dibujarán los polígonos
   const [denueLayer, setDenueLayer] = useState(null); // Estado para almacenar la capa de puntos del DENUE
-  const [puntosEnPoligono, setPuntosEnPoligono] = useState([]); // Estado para almacenar los puntos dentro del polígono dibujado
-  const [draw, setDraw] = useState(null); // Estado para la herramienta de dibujo
+  const [polygonsData, setPolygonsData] = useState([]); // Estado para almacenar los datos de los polígonos dibujados y los puntos dentro de ellos
+  const [drawingActive, setDrawingActive] = useState(false); // Estado para controlar si la herramienta de dibujo está activa
 
   useGeographic(); // Indica a OpenLayers que se utilizarán coordenadas geográficas
 
@@ -43,6 +44,24 @@ function Mapa() {
       }),
     });
 
+    // Crea una fuente vectorial para la capa de dibujo
+    const drawSource = new VectorSource();
+
+    // Crea una capa vectorial para los polígonos dibujados
+    const drawLayer = new VectorLayer({
+      source: drawSource,
+      style: new Style({
+        // Estilo para los polígonos dibujados
+        stroke: new Stroke({
+          color: "blue", // Color del borde
+          width: 2, // Ancho del borde
+        }),
+        fill: new Fill({
+          color: "rgba(0, 0, 255, 0.1)", // Color de relleno
+        }),
+      }),
+    });
+
     // Crea una instancia del mapa de OpenLayers
     const initialMap = new Map({
       target: mapRef.current, // Elemento donde se renderizará el mapa
@@ -50,6 +69,7 @@ function Mapa() {
         new TileLayer({
           source: new OSM(), // Capa base de OpenStreetMap
         }),
+        drawLayer, // Capa para dibujar polígonos
         denueLayer, // Capa de puntos del DENUE
       ],
       view: new View({
@@ -59,6 +79,7 @@ function Mapa() {
     });
 
     setMap(initialMap); // Guarda la instancia del mapa en el estado
+    setDrawLayer(drawLayer); // Guarda la capa de dibujo en el estado
     setDenueLayer(denueLayer); // Guarda la capa de puntos del DENUE en el estado
 
     // Función de limpieza que se ejecuta al desmontar el componente
@@ -69,70 +90,130 @@ function Mapa() {
     };
   }, []); // El array vacío indica que este useEffect se ejecuta solo una vez
 
-  // Activar/desactivar la herramienta de dibujo
-  const toggleDraw = () => {
-    if (draw) {
-      map.removeInteraction(draw); // Elimina la interacción de dibujo si ya existe
-      setDraw(null); // Actualiza el estado para indicar que no hay herramienta de dibujo activa
-    } else {
+  useEffect(() => {
+    // Este useEffect se ejecuta cuando cambia el estado del mapa o drawingActive
+
+    if (map && drawingActive) {
+      // Si el mapa está listo y la herramienta de dibujo está activa
       // Crea una nueva interacción de dibujo de tipo "Polygon"
       const drawInteraction = new Draw({
-        source: new VectorSource(), // La fuente donde se guardará el polígono dibujado
+        source: drawLayer.getSource(), // La fuente donde se guardará el polígono dibujado
         type: "Polygon", // Tipo de geometría a dibujar
+        minPoints: 3, // Mínimo de puntos para formar un polígono
       });
 
       // Agrega un event listener para el evento "drawend" (cuando se termina de dibujar el polígono)
-      drawInteraction.on("drawend", handleDrawEnd);
-      map.addInteraction(drawInteraction); // Agrega la interacción de dibujo al mapa
-      setDraw(drawInteraction); // Actualiza el estado para indicar que la herramienta de dibujo está activa
-    }
-  };
+      drawInteraction.on("drawend", (event) => {
+        const polygon = event.feature.getGeometry().getCoordinates(); // Obtiene las coordenadas del polígono dibujado
+        const turfPolygon = turf.polygon(polygon); // Crea un polígono Turf.js a partir de las coordenadas
 
-  // Maneja el evento cuando se completa un polígono
-  const handleDrawEnd = (event) => {
-    const drawnFeature = event.feature; // Obtiene la característica dibujada (el polígono)
-    const drawnPolygon = new GeoJSON().writeFeatureObject(drawnFeature); // Convierte la característica a un objeto GeoJSON
+        // Filtra los puntos que están dentro del polígono dibujado
+        const puntosDentro = puntosData.features.filter((point) => {
+          const pointCoords = point.geometry.coordinates;
+          const turfPoint = turf.point(pointCoords); // Crea un punto Turf.js a partir de las coordenadas del punto
+          return turf.booleanPointInPolygon(turfPoint, turfPolygon); // Verifica si el punto está dentro del polígono
+        });
 
-    // Verifica si el polígono tiene al menos 3 puntos (para que sea válido)
-    if (drawnPolygon.geometry.coordinates[0].length >= 4) {
-      const polygon = turf.polygon(drawnPolygon.geometry.coordinates); // Crea un polígono Turf.js a partir de las coordenadas
+        // Actualiza el estado polygonsData con los nuevos datos del polígono y los puntos dentro de él
+        setPolygonsData((prevPolygonsData) => [
+          ...prevPolygonsData,
+          { polygon, puntosDentro },
+        ]);
 
-      // Filtra los puntos que están dentro del polígono dibujado
-      const puntosDentro = puntosData.features.filter((point) => {
-        const pointCoords = point.geometry.coordinates;
-        const turfPoint = turf.point(pointCoords); // Crea un punto Turf.js a partir de las coordenadas del punto
-        return turf.booleanPointInPolygon(turfPoint, polygon); // Verifica si el punto está dentro del polígono
+        setDrawingActive(false); // Desactiva la herramienta de dibujo después de dibujar un polígono
       });
 
-      setPuntosEnPoligono(puntosDentro); // Actualiza el estado con los puntos filtrados
+      map.addInteraction(drawInteraction); // Agrega la interacción de dibujo al mapa
+
+      // Función de limpieza que se ejecuta cuando se desmonta el componente o cambia el estado del mapa o drawingActive
+      return () => {
+        map.removeInteraction(drawInteraction); // Elimina la interacción de dibujo del mapa
+      };
     }
+  }, [map, drawingActive]); // Este useEffect se volverá a ejecutar si cambia el mapa o drawingActive
+
+  // Función para activar/desactivar la herramienta de dibujo
+  const handleDrawToggle = () => {
+    setDrawingActive(!drawingActive); // Cambia el estado de drawingActive
+  };
+
+  // Función para limpiar la búsqueda y los polígonos dibujados
+  const handleClearSearch = () => {
+    drawLayer.getSource().clear(); // Limpia la fuente de la capa de dibujo (elimina los polígonos)
+    setPolygonsData([]); // Limpia el estado polygonsData
   };
 
   return (
     <div>
-      {/* Botón para activar/desactivar el dibujo de polígonos */}
-      <button onClick={toggleDraw}>
-        {draw ? "Desactivar Filtro" : "Activar Filtro"}
-      </button>
+      {/* Instrucciones de uso */}
+      <div
+        style={{
+          padding: "10px",
+          backgroundColor: "#f0f0f0",
+          borderRadius: "8px",
+          marginBottom: "10px",
+        }}
+      >
+        <h4>Instrucciones de uso:</h4>
+        <p>
+          Para realizar una búsqueda, activa el filtro y dibuja un área en el
+          mapa. Puedes dibujar múltiples áreas y segmentar los resultados.
+        </p>
+        <button
+          onClick={handleDrawToggle}
+          style={{
+            padding: "8px 16px",
+            backgroundColor: "#007bff",
+            color: "white",
+            border: "none",
+            borderRadius: "4px",
+            cursor: "pointer",
+            marginRight: "10px",
+          }}
+        >
+          {drawingActive ? "Desactivar filtro" : "Activar filtro"}
+        </button>
+        <button
+          onClick={handleClearSearch}
+          style={{
+            padding: "8px 16px",
+            backgroundColor: "#dc3545",
+            color: "white",
+            border: "none",
+            borderRadius: "4px",
+            cursor: "pointer",
+          }}
+        >
+          Limpiar búsqueda
+        </button>
+      </div>
 
       {/* Elemento donde se renderizará el mapa */}
-      <div ref={mapRef} style={{ width: "100%", height: "500px" }} />
+      <div
+        ref={mapRef}
+        style={{ width: "100%", height: "500px", marginBottom: "20px" }}
+      />
 
-      {/* Lista de puntos dentro del polígono dibujado */}
-      {puntosEnPoligono.length > 0 && (
+      {/* Lista de resultados por polígono */}
+      {polygonsData.length > 0 && (
         <div style={{ marginTop: "20px" }}>
-          <h3>Puntos dentro del polígono:</h3>
-          <ul>
-            {puntosEnPoligono.map((point, index) => {
-              const propiedades = point.properties;
-              return (
-                <li key={index}>
-                  {propiedades.nom_estab || "Sin nombre"} -{" "}
-                  {propiedades.nombre_act || "Actividad desconocida"}
-                </li>
-              );
-            })}
-          </ul>
+          <h3>Resultados de búsqueda por polígono:</h3>
+          {polygonsData.map((data, index) => (
+            <div key={index} style={{ marginBottom: "20px" }}>
+              <h4>Polígono {index + 1}:</h4>
+              <ul>
+                {data.puntosDentro.map((point, idx) => {
+                  const propiedades = point.properties;
+                  return (
+                    <li key={idx}>
+                      {propiedades.nom_estab || "Sin nombre"} -{" "}
+                      {propiedades.nombre_act || "Actividad desconocida"}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
         </div>
       )}
     </div>
