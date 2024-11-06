@@ -7,7 +7,7 @@ import VectorLayer from "ol/layer/Vector"; // Importa la clase VectorLayer para 
 import VectorSource from "ol/source/Vector"; // Importa la clase VectorSource para fuentes vectoriales
 import GeoJSON from "ol/format/GeoJSON"; // Importa el formato GeoJSON para leer datos GeoJSON
 import { useGeographic } from "ol/proj"; // Importa la función useGeographic para usar coordenadas geográficas
-import { Style, Stroke, Fill, Circle as OlCircle } from "ol/style"; // Importa clases de estilo para las características del mapa, incluyendo Circle
+import { Style, Stroke, Fill, Text } from "ol/style"; // Importa clases de estilo para las características del mapa, incluyendo Text
 import * as turf from "@turf/turf"; // Importa la biblioteca Turf.js para operaciones geoespaciales
 import municipiosData from "./municipios_oaxaca.json"; // Importa los datos GeoJSON de los municipios de Oaxaca
 import puntosData from "./denue_inegi_20_.json"; // Importa los datos de puntos del DENUE
@@ -16,7 +16,6 @@ function Mapa() {
   const mapRef = useRef(); // Referencia al elemento del mapa
   const [map, setMap] = useState(null); // Estado para almacenar la instancia del mapa
   const [municipiosLayer, setMunicipiosLayer] = useState(null); // Estado para almacenar la capa de municipios
-  const [denueLayer, setDenueLayer] = useState(null); // Estado para almacenar la capa de puntos del DENUE
   const [selectedMunicipio, setSelectedMunicipio] = useState(""); // Estado para almacenar el municipio seleccionado
   const [puntosEnMunicipio, setPuntosEnMunicipio] = useState([]); // Estado para almacenar los puntos dentro del municipio seleccionado
 
@@ -25,51 +24,65 @@ function Mapa() {
   useEffect(() => {
     // Este useEffect se ejecuta solo una vez al montar el componente
 
-    // Cargar y procesar los datos de los municipios
+    // Procesa los datos de los municipios y calcula la cantidad de puntos dentro de cada uno
     const municipiosSource = new VectorSource({
       features: new GeoJSON().readFeatures(municipiosData),
     });
 
+    // Función para calcular la cantidad de puntos dentro de cada municipio
+    const calcularTotalPuntos = (feature) => {
+      const municipioGeometry = feature.getGeometry().getCoordinates(); // Obtiene las coordenadas del municipio
+      let municipioPolygon; // Variable para almacenar el polígono del municipio
+
+      // Crea un polígono Turf.js a partir de las coordenadas del municipio
+      if (feature.getGeometry().getType() === "MultiPolygon") {
+        municipioPolygon = turf.multiPolygon(municipioGeometry);
+      } else if (feature.getGeometry().getType() === "Polygon") {
+        municipioPolygon = turf.polygon(municipioGeometry);
+      }
+
+      // Filtra los puntos que están dentro del polígono del municipio
+      const puntosDentro = puntosData.features.filter((point) => {
+        const turfPoint = turf.point(point.geometry.coordinates);
+        return turf.booleanPointInPolygon(turfPoint, municipioPolygon);
+      });
+
+      return puntosDentro.length; // Devuelve la cantidad de puntos dentro del municipio
+    };
+
+    // Crea una capa para los municipios con el total de puntos como etiqueta
     const municipiosLayer = new VectorLayer({
       source: municipiosSource,
-      style: new Style({
-        fill: new Fill({
-          color: "rgba(0, 0, 255, 0.3)", // Color de relleno de los municipios
-        }),
-        stroke: new Stroke({
-          color: "#333", // Color del borde de los municipios
-          width: 2, // Ancho del borde de los municipios
-        }),
-      }),
-    });
-
-    // Cargar y procesar los puntos del DENUE
-    const puntosSource = new VectorSource({
-      features: new GeoJSON().readFeatures(puntosData),
-    });
-
-    const denueLayer = new VectorLayer({
-      source: puntosSource,
-      style: new Style({
-        image: new OlCircle({
-          // Estilo de círculo para los puntos
-          radius: 5, // Radio del círculo
+      style: (feature) => {
+        const totalPuntos = calcularTotalPuntos(feature); // Calcula el total de puntos en el municipio
+        return new Style({
           fill: new Fill({
-            color: "red", // Color de relleno del círculo
+            color: "rgba(0, 0, 255, 0.3)", // Color de relleno de los municipios
           }),
-        }),
-      }),
+          stroke: new Stroke({
+            color: "#333", // Color del borde de los municipios
+            width: 2, // Ancho del borde de los municipios
+          }),
+          text: new Text({
+            // Agrega una etiqueta de texto con el total de puntos
+            text: totalPuntos.toString(), // Convierte el total de puntos a texto
+            font: "bold 12px Arial", // Estilo de fuente
+            fill: new Fill({ color: "#000" }), // Color de relleno del texto
+            stroke: new Stroke({ color: "#fff", width: 3 }), // Color del borde del texto
+            offsetY: -10, // Desplazamiento vertical del texto
+          }),
+        });
+      },
     });
 
-    // Crea una instancia del mapa de OpenLayers
+    // Configuración inicial del mapa
     const initialMap = new Map({
       target: mapRef.current, // Elemento donde se renderizará el mapa
       layers: [
         new TileLayer({
           source: new OSM(), // Capa base de OpenStreetMap
         }),
-        municipiosLayer, // Capa de polígonos de municipios
-        denueLayer, // Capa de puntos del DENUE
+        municipiosLayer, // Capa de municipios con etiquetas
       ],
       view: new View({
         center: [-96.769722, 17.066167], // Coordenadas del centro inicial
@@ -79,7 +92,6 @@ function Mapa() {
 
     setMap(initialMap); // Guarda la instancia del mapa en el estado
     setMunicipiosLayer(municipiosLayer); // Guarda la capa de municipios en el estado
-    setDenueLayer(denueLayer); // Guarda la capa de puntos del DENUE en el estado
 
     // Función de limpieza que se ejecuta al desmontar el componente
     return () => {
@@ -94,7 +106,6 @@ function Mapa() {
     const selectedCVEGEO = event.target.value; // Obtiene el CVEGEO del municipio seleccionado
     setSelectedMunicipio(selectedCVEGEO); // Actualiza el estado del municipio seleccionado
 
-    // Filtrar los puntos dentro del municipio seleccionado
     if (selectedCVEGEO) {
       // Busca el municipio seleccionado en los datos de municipios
       const municipioFeature = municipiosData.features.find(
@@ -104,47 +115,32 @@ function Mapa() {
       if (municipioFeature) {
         const municipioGeometry = municipioFeature.geometry; // Obtiene la geometría del municipio
 
-        // Verificar si el municipio tiene una geometría válida
+        // Crea un polígono Turf.js a partir de las coordenadas del municipio
         let municipioPolygon;
         if (municipioGeometry.type === "MultiPolygon") {
           // Filtra los polígonos que tengan al menos 4 puntos
           const validCoordinates = municipioGeometry.coordinates.filter(
             (polygon) => polygon[0].length >= 4
           );
-
-          if (validCoordinates.length > 0) {
-            // Crea un MultiPolygon con Turf.js si hay coordenadas válidas
-            municipioPolygon = turf.multiPolygon(validCoordinates);
-          } else {
-            console.error("Geometría inválida en municipio:", selectedCVEGEO);
-            return;
-          }
+          municipioPolygon = turf.multiPolygon(validCoordinates);
         } else if (municipioGeometry.type === "Polygon") {
-          // Verifica que el polígono tenga al menos 4 puntos
-          if (municipioGeometry.coordinates[0].length >= 4) {
-            // Crea un Polygon con Turf.js
-            municipioPolygon = turf.polygon(municipioGeometry.coordinates);
-          } else {
-            console.error("Geometría inválida en municipio:", selectedCVEGEO);
-            return;
-          }
+          municipioPolygon = turf.polygon(municipioGeometry.coordinates);
         }
 
         // Filtra los puntos que están dentro del polígono del municipio
         const puntosDentro = puntosData.features.filter((point) => {
-          const pointCoords = point.geometry.coordinates;
-          const turfPoint = turf.point(pointCoords);
+          const turfPoint = turf.point(point.geometry.coordinates);
           return turf.booleanPointInPolygon(turfPoint, municipioPolygon);
         });
 
         setPuntosEnMunicipio(puntosDentro); // Actualiza el estado con los puntos encontrados
 
-        // Obtener el bounding box del municipio usando OpenLayers
+        // Obtiene la extensión del municipio usando OpenLayers
         const municipioExtent = new GeoJSON()
           .readGeometry(municipioGeometry)
           .getExtent();
 
-        // Aplicar el zoom al municipio seleccionado
+        // Aplica el zoom al municipio seleccionado
         map.getView().fit(municipioExtent, {
           duration: 1000, // Duración del zoom en milisegundos
           padding: [50, 50, 50, 50], // Espaciado alrededor del municipio
@@ -170,10 +166,8 @@ function Mapa() {
         ))}
       </select>
 
-      {/* Elemento donde se renderizará el mapa */}
       <div ref={mapRef} style={{ width: "100%", height: "500px" }} />
 
-      {/* Muestra la lista de puntos dentro del municipio seleccionado */}
       {puntosEnMunicipio.length > 0 && (
         <div style={{ marginTop: "20px" }}>
           <h3>Puntos dentro del municipio:</h3>
