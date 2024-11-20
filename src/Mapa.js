@@ -234,28 +234,6 @@ function Mapa() {
         style={{ width: "100%", height: "500px", marginBottom: "20px" }}
       />
 
-      {polygonsData.length > 0 && (
-        <div style={{ marginTop: "20px" }}>
-          <h3>Resultados de búsqueda por polígono:</h3>
-          {polygonsData.map((data, index) => (
-            <div key={index} style={{ marginBottom: "20px" }}>
-              <h4>Polígono {index + 1}:</h4>
-              <ul>
-                {data.puntosDentro.map((point, idx) => {
-                  const propiedades = point.properties;
-                  return (
-                    <li key={idx}>
-                      {propiedades.nom_estab || "Sin nombre"} -{" "}
-                      {propiedades.nombre_act || "Actividad desconocida"}
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          ))}
-        </div>
-      )}
-
       {savedQueries.length > 0 && (
         <div style={{ marginTop: "20px" }}>
           <h3>Consultas guardadas:</h3>
@@ -276,6 +254,28 @@ function Mapa() {
             >
               Cargar consulta {index + 1}
             </button>
+          ))}
+        </div>
+      )}
+
+      {polygonsData.length > 0 && (
+        <div style={{ marginTop: "20px" }}>
+          <h3>Resultados de búsqueda por polígono:</h3>
+          {polygonsData.map((data, index) => (
+            <div key={index} style={{ marginBottom: "20px" }}>
+              <h4>Polígono {index + 1}:</h4>
+              <ul>
+                {data.puntosDentro.map((point, idx) => {
+                  const propiedades = point.properties;
+                  return (
+                    <li key={idx}>
+                      {propiedades.nom_estab || "Sin nombre"} -{" "}
+                      {propiedades.nombre_act || "Actividad desconocida"}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
           ))}
         </div>
       )}
